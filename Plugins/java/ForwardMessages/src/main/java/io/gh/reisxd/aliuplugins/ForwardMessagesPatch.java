@@ -215,7 +215,6 @@ public class ForwardMessagesPatch extends Plugin {
 
     @Override
     public void stop(Context context) {
-        // Remove all patches
         patcher.unpatchAll();
     }
 
