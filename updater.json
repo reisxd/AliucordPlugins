@@ -1,1 +1,1 @@
-{"ForwardMessages":{"minimumDiscordVersion":126021,"version":"1.0.0","build":"https://raw.githubusercontent.com/reisxd/AliucordPlugins/builds/%s.zip","changelog":""}}
+{"ForwardMessages":{"minimumDiscordVersion":126021,"version":"1.0.1","build":"https://raw.githubusercontent.com/reisxd/AliucordPlugins/builds/%s.zip","changelog":"v1.0.1\n- Changed the icon with the forward icon (mirrored)\n- Internal data processing for IDs is now different\n\nv1.0.0\n- Initial release"}}
