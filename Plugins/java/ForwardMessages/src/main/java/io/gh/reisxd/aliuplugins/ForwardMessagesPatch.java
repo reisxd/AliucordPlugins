@@ -42,14 +42,19 @@ import java.lang.reflect.Method;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 
+import io.gh.reisxd.aliuplugins.MirroredDrawable;
+
 @AliucordPlugin(requiresRestart = true)
 
 public class ForwardMessagesPatch extends Plugin {
     @Override
     public void start(Context context) throws Throwable {
         var forwardId = View.generateViewId();
-        var forwardDataId = View.generateViewId();
-        Drawable resendIcon = ContextCompat.getDrawable(context, com.lytefast.flexinput.R.e.ic_resend_24dp).mutate();
+
+        Drawable replyIcon = ContextCompat.getDrawable(context, com.lytefast.flexinput.R.e.ic_reply_24dp).mutate();
+        replyIcon.setAutoMirrored(true);
+        Utils.tintToTheme(replyIcon);
+        MirroredDrawable forwardIcon = new MirroredDrawable(replyIcon);
 
         Method bindingReflection = WidgetIncomingShare.class.getDeclaredMethod("getBinding");
         bindingReflection.setAccessible(true);
@@ -57,123 +62,138 @@ public class ForwardMessagesPatch extends Plugin {
         modelCommentField.setAccessible(true);
 
         // Add "Forward" action to Action menu
-        patcher.patch(WidgetChatListActions.class.getDeclaredMethod("configureUI", WidgetChatListActions.Model.class), new PreHook(param -> {
-            var actions = (WidgetChatListActions) param.thisObject;
-            var scrollView = (NestedScrollView) actions.getView();
-            var lay = (LinearLayout) scrollView.getChildAt(0);
-            if (lay.findViewById(forwardId) == null) {
-                TextView tw = new TextView(lay.getContext(), null, 0, com.lytefast.flexinput.R.i.UiKit_Settings_Item_Icon);
-                tw.setId(forwardId);
-                tw.setText("Forward");
-                tw.setCompoundDrawablesRelativeWithIntrinsicBounds(resendIcon, null, null, null);
-                lay.addView(tw, 5);
-                tw.setOnClickListener((v) -> {
-                    WidgetChatListActions.Model model = (WidgetChatListActions.Model) param.args[0];
-                    long messageId = model.getMessage().getId();
-                    String messageContent = model.getMessage().getContent();
-                    long channelId = model.getChannel().k();
+        patcher.patch(WidgetChatListActions.class.getDeclaredMethod("configureUI", WidgetChatListActions.Model.class),
+                new PreHook(param -> {
+                    var actions = (WidgetChatListActions) param.thisObject;
+                    var scrollView = (NestedScrollView) actions.getView();
+                    var lay = (LinearLayout) scrollView.getChildAt(0);
 
-                    Intent putExtra = new Intent()
-                            .putExtra("io.gh.reisxd.aliuplugins.MESSAGE_CONTENT", messageContent)
-                            .putExtra("io.gh.reisxd.aliuplugins.MESSAGE_ID", messageId)
-                            .putExtra("io.gh.reisxd.aliuplugins.CHANNEL_ID", channelId);
-                    Utils.mainThread.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            Utils.openPage(Utils.getAppActivity(), WidgetIncomingShare.class, putExtra);
-                            actions.dismiss();
+                    if (lay.findViewById(forwardId) == null) {
+                        TextView tw = new TextView(lay.getContext(), null, 0,
+                                com.lytefast.flexinput.R.i.UiKit_Settings_Item_Icon);
+                        tw.setId(forwardId);
+                        tw.setText("Forward");
+                        tw.setCompoundDrawablesRelativeWithIntrinsicBounds(forwardIcon, null, null, null);
+                        int childrenCount = lay.getChildCount();
+                        boolean foundIndex = false;
+                        for (int i = 0; i < childrenCount; i++) {
+                            View view = lay.getChildAt(i);
+                            if (view.getId() == Utils.getResId("dialog_chat_actions_reply", "id")) {
+                                foundIndex = true;
+                                lay.addView(tw, i + 1);
+                                break;
+                            }
                         }
-                    });
-                });
-            }
-        }));
+                        if (!foundIndex)
+                            lay.addView(tw, 5);
+                        tw.setOnClickListener((v) -> {
+                            WidgetChatListActions.Model model = (WidgetChatListActions.Model) param.args[0];
+                            long messageId = model.getMessage().getId();
+                            String messageContent = model.getMessage().getContent();
+                            long channelId = model.getChannel().k();
 
-        // Check if the incoming intent is a forwarding intent or not, add forwarding data and change labels if it is
-        patcher.patch(WidgetIncomingShare.class.getDeclaredMethod("initialize", WidgetIncomingShare.ContentModel.class), new PreHook(param -> {
-            WidgetIncomingShare share = (WidgetIncomingShare) param.thisObject;
-            Intent intent = share.getMostRecentIntent();
-            long messageId = intent.getLongExtra("io.gh.reisxd.aliuplugins.MESSAGE_ID", 0);
-            if (messageId == 0) return;
-            String messageContent = intent.getStringExtra("io.gh.reisxd.aliuplugins.MESSAGE_CONTENT");
-            long channelId = intent.getLongExtra("io.gh.reisxd.aliuplugins.CHANNEL_ID", 0);
-            WidgetIncomingShareBinding binding = null;
-            try {
-                binding = (WidgetIncomingShareBinding) bindingReflection.invoke(share);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
+                            Intent putExtra = new Intent()
+                                    .putExtra("io.gh.reisxd.aliuplugins.MESSAGE_CONTENT", messageContent)
+                                    .putExtra("io.gh.reisxd.aliuplugins.MESSAGE_ID", messageId)
+                                    .putExtra("io.gh.reisxd.aliuplugins.CHANNEL_ID", channelId);
+                            Utils.mainThread.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    Utils.openPage(Utils.getAppActivity(), WidgetIncomingShare.class, putExtra);
+                                    actions.dismiss();
+                                }
+                            });
+                        });
+                    }
+                }));
 
-            if (binding.i.findViewById(forwardDataId) == null && messageId != 0) {
-                TextView view = new TextView(context);
-                view.setText(String.format("%d/%d", channelId, messageId));
-                view.setVisibility(View.GONE);
-                view.setId(forwardDataId);
+        // Check if the incoming intent is a forwarding intent or not, add forwarding
+        // data and change labels if it is
+        patcher.patch(WidgetIncomingShare.class.getDeclaredMethod("initialize", WidgetIncomingShare.ContentModel.class),
+                new PreHook(param -> {
+                    WidgetIncomingShare share = (WidgetIncomingShare) param.thisObject;
+                    Intent intent = share.getMostRecentIntent();
+                    long messageId = intent.getLongExtra("io.gh.reisxd.aliuplugins.MESSAGE_ID", 0);
+                    long channelId = intent.getLongExtra("io.gh.reisxd.aliuplugins.CHANNEL_ID", 0);
+                    String messageContent = intent.getStringExtra("io.gh.reisxd.aliuplugins.MESSAGE_CONTENT");
 
-                binding.i.addView(view);
+                    if (messageId == 0 || channelId == 0)
+                        return;
 
-                AppBarLayout appBar = (AppBarLayout) binding.a.getChildAt(0);
-                Toolbar toolbar = (Toolbar) appBar.getChildAt(0);
-                toolbar.setTitle("Forward");
-                LinearLayout layout = (LinearLayout) binding.j.getChildAt(0);
+                    WidgetIncomingShareBinding binding = null;
+                    try {
+                        binding = (WidgetIncomingShareBinding) bindingReflection.invoke(share);
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
 
-                TextView shareToText = (TextView) layout.getChildAt(4);
-                shareToText.setText("Forward To");
+                    AppBarLayout appBar = (AppBarLayout) binding.a.getChildAt(0);
+                    Toolbar toolbar = (Toolbar) appBar.getChildAt(0);
+                    toolbar.setTitle("Forward");
+                    LinearLayout layout = (LinearLayout) binding.j.getChildAt(0);
 
-                TextView messagePreviewText = (TextView) layout.getChildAt(0);
-                messagePreviewText.setText("Optional Message");
+                    TextView shareToText = (TextView) layout.getChildAt(4);
+                    shareToText.setText("Forward To");
 
-                TextView previewText = new TextView(layout.getContext(), null, 0, com.lytefast.flexinput.R.i.UiKit_TextAppearance);
-                TextView messagePreviewCustom = new TextView(layout.getContext(), null, 0, com.lytefast.flexinput.R.i.UiKit_Search_Header);
-                messagePreviewCustom.setText("Message Preview");
-                previewText.setText(messageContent);
-                previewText.setPadding(DimenUtils.dpToPx(16), DimenUtils.dpToPx(2), 0, 0);
+                    TextView messagePreviewText = (TextView) layout.getChildAt(0);
+                    messagePreviewText.setText("Optional Message");
 
-                layout.addView(messagePreviewCustom, 0);
-                layout.addView(previewText, 1);
+                    TextView previewText = new TextView(layout.getContext(), null, 0,
+                            com.lytefast.flexinput.R.i.UiKit_TextAppearance);
+                    TextView messagePreviewCustom = new TextView(layout.getContext(), null, 0,
+                            com.lytefast.flexinput.R.i.UiKit_Search_Header);
+                    messagePreviewCustom.setText("Message Preview");
+                    previewText.setText(messageContent);
+                    previewText.setPadding(DimenUtils.dpToPx(16), DimenUtils.dpToPx(2), 0, 0);
 
-            }
-        }));
+                    layout.addView(messagePreviewCustom, 0);
+                    layout.addView(previewText, 1);
+
+                }));
 
         // Send the forwarded message to selected chanenl with comment if any
-        patcher.patch(WidgetIncomingShare.class.getDeclaredMethod("onSendClicked", Context.class, WidgetGlobalSearchModel.ItemDataPayload.class, ViewEmbedGameInvite.Model.class, WidgetIncomingShare.ContentModel.class, boolean.class, int.class, boolean.class, CaptchaHelper.CaptchaPayload.class), new InsteadHook(param -> {
+        patcher.patch(WidgetIncomingShare.class.getDeclaredMethod("onSendClicked", Context.class,
+                WidgetGlobalSearchModel.ItemDataPayload.class, ViewEmbedGameInvite.Model.class,
+                WidgetIncomingShare.ContentModel.class, boolean.class, int.class, boolean.class,
+                CaptchaHelper.CaptchaPayload.class), new InsteadHook(param -> {
             WidgetIncomingShare share = (WidgetIncomingShare) param.thisObject;
             WidgetGlobalSearchModel.ItemDataPayload itemDataPayload = (WidgetGlobalSearchModel.ItemDataPayload) param.args[1];
+            Intent intent = share.getMostRecentIntent();
+
             WidgetIncomingShareBinding binding = null;
             try {
                 binding = (WidgetIncomingShareBinding) bindingReflection.invoke(share);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
-            TextView view = binding.i.findViewById(forwardDataId);
             EditText textInput = binding.d.getEditText();
-            if (view != null) {
-                String[] ids = view.getText().toString().split("/");
-                long channelId = Long.parseLong(ids[0]);
-                long messageId = Long.parseLong(ids[1]);
+
+            long messageId = intent.getLongExtra("io.gh.reisxd.aliuplugins.MESSAGE_ID", 0);
+            long channelId = intent.getLongExtra("io.gh.reisxd.aliuplugins.CHANNEL_ID", 0);
+            if (messageId != 0 && channelId != 0) {
                 long selectedChannel = itemDataPayload.getChannel().k();
                 String commentMessage = textInput.getText().toString();
                 Utils.threadPool.submit(new Runnable() {
                     @Override
                     public void run() {
-                        Http.Response res = null;
                         try {
-                            res = Http.Request.newDiscordRNRequest(String.format("/channels/%d/messages", selectedChannel), "POST")
-                                    .executeWithJson(new Message(new MessageReference(1, messageId, channelId, null, false), ""));
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
-                        }
-
-                        if (!res.ok()) {
-                            Toast.makeText(context, "Forwarding failed: " + res.statusCode, Toast.LENGTH_SHORT).show();
-                        } else {
-                            if (!commentMessage.isEmpty()) {
-                                try {
-                                    Http.Request.newDiscordRNRequest(String.format("/channels/%d/messages", selectedChannel), "POST")
+                            Http.Response res = Http.Request
+                                    .newDiscordRNRequest(
+                                            String.format("/channels/%d/messages", selectedChannel), "POST")
+                                    .executeWithJson(new Message(
+                                            new MessageReference(1, messageId, channelId, null, false), ""));
+                            if (!res.ok())
+                                Toast.makeText(context, "Forwarding failed: " + res.statusCode,
+                                        Toast.LENGTH_SHORT).show();
+                            else {
+                                if (!commentMessage.isEmpty()) {
+                                    Http.Request.newDiscordRNRequest(
+                                                    String.format("/channels/%d/messages", selectedChannel), "POST")
                                             .executeWithJson(new Message(null, commentMessage));
-                                } catch (IOException e) {
-                                    throw new RuntimeException(e);
                                 }
                             }
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
                         }
                     }
                 });
@@ -181,7 +201,8 @@ public class ForwardMessagesPatch extends Plugin {
                 Utils.mainThread.post(new Runnable() {
                     @Override
                     public void run() {
-                        share.startActivity(IntentUtils.RouteBuilders.selectChannel(selectedChannel, 0, null).setPackage(Utils.getAppContext().getPackageName()));
+                        share.startActivity(IntentUtils.RouteBuilders.selectChannel(selectedChannel, 0, null)
+                                .setPackage(Utils.getAppContext().getPackageName()));
                     }
                 });
 
@@ -194,17 +215,14 @@ public class ForwardMessagesPatch extends Plugin {
         }));
 
         // Activate the send button all the time if forwarding data exists
-        patcher.patch(WidgetIncomingShare.class.getDeclaredMethod("configureUi", WidgetIncomingShare.Model.class, Clock.class), new PreHook(param -> {
+        patcher.patch(WidgetIncomingShare.class.getDeclaredMethod("configureUi", WidgetIncomingShare.Model.class,
+                Clock.class), new PreHook(param -> {
             WidgetIncomingShare.Model model = (WidgetIncomingShare.Model) param.args[0];
             WidgetIncomingShare share = (WidgetIncomingShare) param.thisObject;
-            WidgetIncomingShareBinding binding = null;
+            Intent intent = share.getMostRecentIntent();
+            long messageId = intent.getLongExtra("io.gh.reisxd.aliuplugins.MESSAGE_ID", 0);
             try {
-                binding = (WidgetIncomingShareBinding) bindingReflection.invoke(share);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-            try {
-                if (binding.i.findViewById(forwardDataId) != null) {
+                if (messageId != 0) {
                     modelCommentField.set(model, "...");
                 }
             } catch (Exception e) {
@@ -235,9 +253,12 @@ public class ForwardMessagesPatch extends Plugin {
     }
 
     public int nextBits(Random rng, int bits) {
-        if (bits < 0 || bits > 32) throw new IllegalArgumentException("bits must be 0..32");
-        if (bits == 0) return 0;
-        if (bits == 32) return rng.nextInt();
+        if (bits < 0 || bits > 32)
+            throw new IllegalArgumentException("bits must be 0..32");
+        if (bits == 0)
+            return 0;
+        if (bits == 32)
+            return rng.nextInt();
         int mask = (1 << bits) - 1;
         return rng.nextInt() & mask;
     }
@@ -245,7 +266,6 @@ public class ForwardMessagesPatch extends Plugin {
     public int nextBits(int bits) {
         return nextBits(ThreadLocalRandom.current(), bits);
     }
-
 
     public class Message {
         public String content = "";
@@ -255,11 +275,13 @@ public class ForwardMessagesPatch extends Plugin {
         public String mobile_network_type = "unknown";
         public int signal_strength = 0;
         public MessageReference message_reference;
+
         public Message(MessageReference reference, String content) {
             this.message_reference = reference;
             this.content = content;
             Context context = Utils.getAppContext();
-            ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+            ConnectivityManager connectivityManager = (ConnectivityManager) context
+                    .getSystemService(Context.CONNECTIVITY_SERVICE);
             TelephonyManager telephonyManager = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
 
             Network activeNetwork = connectivityManager.getActiveNetwork();
