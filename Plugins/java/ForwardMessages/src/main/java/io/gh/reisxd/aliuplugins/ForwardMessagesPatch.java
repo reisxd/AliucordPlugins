@@ -1,4 +1,4 @@
-package com.github.yournamehere;
+package io.gh.reisxd.aliuplugins;
 
 import android.content.Context;
 import android.content.Intent;
@@ -84,8 +84,7 @@ public class ForwardMessagesPatch extends Plugin {
                                 break;
                             }
                         }
-                        if (!foundIndex)
-                            lay.addView(tw, 5);
+                        if (!foundIndex) lay.addView(tw, 5);
                         tw.setOnClickListener((v) -> {
                             WidgetChatListActions.Model model = (WidgetChatListActions.Model) param.args[0];
                             long messageId = model.getMessage().getId();
@@ -96,12 +95,9 @@ public class ForwardMessagesPatch extends Plugin {
                                     .putExtra("io.gh.reisxd.aliuplugins.MESSAGE_CONTENT", messageContent)
                                     .putExtra("io.gh.reisxd.aliuplugins.MESSAGE_ID", messageId)
                                     .putExtra("io.gh.reisxd.aliuplugins.CHANNEL_ID", channelId);
-                            Utils.mainThread.post(new Runnable() {
-                                @Override
-                                public void run() {
-                                    Utils.openPage(Utils.getAppActivity(), WidgetIncomingShare.class, putExtra);
-                                    actions.dismiss();
-                                }
+                            Utils.mainThread.post(() -> {
+                                Utils.openPage(Utils.getAppActivity(), WidgetIncomingShare.class, putExtra);
+                                actions.dismiss();
                             });
                         });
                     }
@@ -151,11 +147,11 @@ public class ForwardMessagesPatch extends Plugin {
 
                 }));
 
-        // Send the forwarded message to selected chanenl with comment if any
+        // Send the forwarded message to selected channel with comment if any
         patcher.patch(WidgetIncomingShare.class.getDeclaredMethod("onSendClicked", Context.class,
                 WidgetGlobalSearchModel.ItemDataPayload.class, ViewEmbedGameInvite.Model.class,
                 WidgetIncomingShare.ContentModel.class, boolean.class, int.class, boolean.class,
-                CaptchaHelper.CaptchaPayload.class), new InsteadHook(param -> {
+                CaptchaHelper.CaptchaPayload.class), new PreHook(param -> {
             WidgetIncomingShare share = (WidgetIncomingShare) param.thisObject;
             WidgetGlobalSearchModel.ItemDataPayload itemDataPayload = (WidgetGlobalSearchModel.ItemDataPayload) param.args[1];
             Intent intent = share.getMostRecentIntent();
@@ -173,45 +169,33 @@ public class ForwardMessagesPatch extends Plugin {
             if (messageId != 0 && channelId != 0) {
                 long selectedChannel = itemDataPayload.getChannel().k();
                 String commentMessage = textInput.getText().toString();
-                Utils.threadPool.submit(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            Http.Response res = Http.Request
-                                    .newDiscordRNRequest(
-                                            String.format("/channels/%d/messages", selectedChannel), "POST")
-                                    .executeWithJson(new Message(
-                                            new MessageReference(1, messageId, channelId, null, false), ""));
-                            if (!res.ok())
-                                Toast.makeText(context, "Forwarding failed: " + res.statusCode,
-                                        Toast.LENGTH_SHORT).show();
-                            else {
-                                if (!commentMessage.isEmpty()) {
-                                    Http.Request.newDiscordRNRequest(
-                                                    String.format("/channels/%d/messages", selectedChannel), "POST")
-                                            .executeWithJson(new Message(null, commentMessage));
-                                }
+                Utils.threadPool.submit(() -> {
+                    try {
+                        Http.Response res = Http.Request
+                                .newDiscordRNRequest(
+                                        String.format("/channels/%d/messages", selectedChannel), "POST")
+                                .executeWithJson(new Message(
+                                        new MessageReference(1, messageId, channelId, null, false), ""));
+                        if (!res.ok())
+                            Toast.makeText(context, "Forwarding failed: " + res.statusCode,
+                                    Toast.LENGTH_SHORT).show();
+                        else {
+                            if (!commentMessage.isEmpty()) {
+                                Http.Request.newDiscordRNRequest(
+                                                String.format("/channels/%d/messages", selectedChannel), "POST")
+                                        .executeWithJson(new Message(null, commentMessage));
                             }
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
                         }
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
                     }
                 });
 
-                Utils.mainThread.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        share.startActivity(IntentUtils.RouteBuilders.selectChannel(selectedChannel, 0, null)
-                                .setPackage(Utils.getAppContext().getPackageName()));
-                    }
-                });
+                Utils.mainThread.post(() -> share.startActivity(IntentUtils.RouteBuilders.selectChannel(selectedChannel, 0, null)
+                        .setPackage(Utils.getAppContext().getPackageName())));
 
                 param.setResult(null);
-
-                return InsteadHook.DO_NOTHING;
             }
-
-            return InsteadHook.Companion;
         }));
 
         // Activate the send button all the time if forwarding data exists
