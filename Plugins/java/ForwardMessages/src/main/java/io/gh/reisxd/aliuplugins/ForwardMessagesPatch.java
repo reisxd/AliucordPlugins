@@ -51,9 +51,10 @@ public class ForwardMessagesPatch extends Plugin {
     public void start(Context context) throws Throwable {
         var forwardId = View.generateViewId();
 
-        Drawable replyIcon = ContextCompat.getDrawable(context, com.lytefast.flexinput.R.e.ic_reply_24dp).mutate();
+        Drawable replyIcon = ContextCompat.getDrawable(Utils.appActivity, com.lytefast.flexinput.R.e.ic_reply_24dp).mutate();
         replyIcon.setAutoMirrored(true);
         Utils.tintToTheme(replyIcon);
+        
         MirroredDrawable forwardIcon = new MirroredDrawable(replyIcon);
 
         Method bindingReflection = WidgetIncomingShare.class.getDeclaredMethod("getBinding");

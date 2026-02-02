@@ -1,9 +1,12 @@
-version = "1.0.2" // Plugin version. Increment this to trigger the updater
+version = "1.0.3" // Plugin version. Increment this to trigger the updater
 description = "Forward messages to your channel of your liking." // Plugin description that will be shown to user
 
 aliucord {
     // Changelog of your plugin
     changelog.set("""
+        v1.0.3
+        - Fixed forward icon having incorrect coloring due to wrong context
+        
         v1.0.2
         - Fixed sharing being broken
         
